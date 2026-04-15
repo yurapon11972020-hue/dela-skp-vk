@@ -1,324 +1,278 @@
 import {
+  ensureConfigOrRender,
   supabase,
+  ADMIN_EMAIL,
   formatDate,
   setMessage,
-  hideMessage,
-  escapeHtml,
-} from '../assets/shared.js';
+  createTag,
+  slugifyTitle,
+} from '../assets/common.js';
 
-const authCard = document.getElementById('auth-card');
-const adminPanel = document.getElementById('admin-panel');
-const loginForm = document.getElementById('login-form');
-const authMessage = document.getElementById('auth-message');
-const adminMessage = document.getElementById('admin-message');
-const adminList = document.getElementById('admin-list');
-const adminEmpty = document.getElementById('admin-empty');
-const statusFilter = document.getElementById('status-filter');
-const refreshButton = document.getElementById('refresh-admin');
-const logoutButton = document.getElementById('logout-btn');
-
-loginForm?.addEventListener('submit', onLogin);
-statusFilter?.addEventListener('change', loadAdminItems);
-refreshButton?.addEventListener('click', loadAdminItems);
-logoutButton?.addEventListener('click', onLogout);
-adminList?.addEventListener('click', onAdminClick);
-adminList?.addEventListener('submit', onAdminSave);
-
-document.addEventListener('DOMContentLoaded', bootstrap);
-
-async function bootstrap() {
-  const { data } = await supabase.auth.getSession();
-  const session = data?.session;
-
-  if (!session) {
-    showLogin();
-    return;
-  }
-
-  const allowed = await checkAdminAccess();
-  if (!allowed) {
-    await supabase.auth.signOut();
-    showLogin();
-    setMessage(authMessage, 'Этот аккаунт не имеет прав администратора.', 'error');
-    return;
-  }
-
-  showAdmin();
-  await loadAdminItems();
+if (!ensureConfigOrRender()) {
+  throw new Error('Config missing');
 }
 
-async function onLogin(event) {
-  event.preventDefault();
-  hideMessage(authMessage);
+const loginBox = document.getElementById('loginBox');
+const sessionBox = document.getElementById('sessionBox');
+const passwordInput = document.getElementById('passwordInput');
+const loginBtn = document.getElementById('loginBtn');
+const logoutBtn = document.getElementById('logoutBtn');
+const loginMessage = document.getElementById('loginMessage');
+const adminIdentity = document.getElementById('adminIdentity');
+const queueList = document.getElementById('queueList');
+const queueEmpty = document.getElementById('queueEmpty');
+const refreshAdminBtn = document.getElementById('refreshAdminBtn');
+const pendingCount = document.getElementById('pendingCount');
+const approvedCount = document.getElementById('approvedCount');
+const rejectedCount = document.getElementById('rejectedCount');
+const template = document.getElementById('adminCardTemplate');
+const tabButtons = Array.from(document.querySelectorAll('[data-tab]'));
 
-  const email = document.getElementById('admin-email').value.trim();
-  const password = document.getElementById('admin-password').value;
-  const button = loginForm.querySelector('button[type="submit"]');
-  button.disabled = true;
+let currentTab = 'pending';
+let currentUser = null;
+let currentUserIsAdmin = false;
 
-  try {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-
-    const allowed = await checkAdminAccess();
-    if (!allowed) {
-      await supabase.auth.signOut();
-      throw new Error('Аккаунт вошёл в систему, но не имеет прав администратора.');
-    }
-
-    loginForm.reset();
-    showAdmin();
-    await loadAdminItems();
-  } catch (error) {
-    console.error(error);
-    setMessage(authMessage, error.message || 'Не удалось войти.', 'error');
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function onLogout() {
-  await supabase.auth.signOut();
-  showLogin();
-  setMessage(authMessage, 'Вы вышли из админки.', 'info');
-}
-
-async function checkAdminAccess() {
-  const { data, error } = await supabase.rpc('is_admin');
-  if (error) {
-    console.error(error);
-    return false;
-  }
-  return Boolean(data);
-}
-
-function showLogin() {
-  adminPanel.classList.add('hidden');
-  authCard.classList.remove('hidden');
-}
-
-function showAdmin() {
-  authCard.classList.add('hidden');
-  adminPanel.classList.remove('hidden');
-  hideMessage(authMessage);
-}
-
-async function loadAdminItems() {
-  adminList.innerHTML = '<div class="empty-state">Загрузка...</div>';
-  adminEmpty.classList.add('hidden');
-  hideMessage(adminMessage);
-
-  let query = supabase
-    .from('good_deeds')
-    .select('*')
-    .order('is_pinned', { ascending: false })
-    .order('display_order', { ascending: false })
-    .order('created_at', { ascending: false });
-
-  const filterValue = statusFilter.value;
-  if (filterValue !== 'all') {
-    query = query.eq('status', filterValue);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error(error);
-    adminList.innerHTML = '';
-    adminEmpty.textContent = 'Не удалось загрузить записи.';
-    adminEmpty.classList.remove('hidden');
-    return;
-  }
-
-  renderAdminItems(data || []);
-}
-
-function renderAdminItems(items) {
-  adminList.innerHTML = '';
-
-  if (!items.length) {
-    adminEmpty.classList.remove('hidden');
-    return;
-  }
-
-  adminEmpty.classList.add('hidden');
-
-  items.forEach((item) => {
-    const wrapper = document.createElement('article');
-    wrapper.className = 'admin-item';
-    wrapper.dataset.id = item.id;
-    wrapper.innerHTML = `
-      <div class="admin-top">
-        <div>
-          <div class="admin-meta-title">Заявка от ${escapeHtml(item.author_name || 'Без имени')}</div>
-          <div class="small-text">Создано: ${formatDate(item.created_at)}</div>
-          <div class="small-text">ID: ${escapeHtml(item.id)}</div>
-        </div>
-        <div class="quick-actions">
-          <span class="status-badge status-${escapeHtml(item.status)}">${statusLabel(item.status)}</span>
-          ${item.is_pinned ? '<span class="pin-badge">📌 Закреплено</span>' : ''}
-        </div>
-      </div>
-
-      <form class="admin-edit-form">
-        <div class="admin-grid">
-          <div class="admin-side">
-            <label>
-              <span>Статус</span>
-              <select name="status">
-                <option value="pending" ${item.status === 'pending' ? 'selected' : ''}>На рассмотрении</option>
-                <option value="approved" ${item.status === 'approved' ? 'selected' : ''}>Одобрено</option>
-                <option value="rejected" ${item.status === 'rejected' ? 'selected' : ''}>Отклонено</option>
-              </select>
-            </label>
-
-            <label>
-              <span>Лайки</span>
-              <input name="likes_count" type="number" min="0" value="${item.likes_count}" />
-            </label>
-
-            <label>
-              <span>Порядок закрепления</span>
-              <input name="display_order" type="number" value="${item.display_order || 0}" />
-            </label>
-
-            <label class="checkbox-row">
-              <input name="is_pinned" type="checkbox" ${item.is_pinned ? 'checked' : ''} />
-              <span>Закрепить запись</span>
-            </label>
-          </div>
-
-          <div class="admin-main">
-            <label>
-              <span>От кого</span>
-              <input name="author_name" maxlength="80" value="${escapeHtml(item.author_name || '')}" />
-            </label>
-
-            <label>
-              <span>Текст доброго дела</span>
-              <textarea name="deed_text" maxlength="1000">${escapeHtml(item.deed_text || '')}</textarea>
-            </label>
-
-            <label>
-              <span>Заметка администратора</span>
-              <textarea name="admin_note" rows="3" maxlength="1000">${escapeHtml(item.admin_note || '')}</textarea>
-            </label>
-          </div>
-        </div>
-
-        <div class="card-actions">
-          <button class="btn btn-primary" type="submit">Сохранить</button>
-          <button class="btn btn-secondary" type="button" data-action="approve">Одобрить</button>
-          <button class="btn btn-secondary" type="button" data-action="reject">Отклонить</button>
-          <button class="btn btn-danger" type="button" data-action="delete">Удалить</button>
-        </div>
-      </form>
-    `;
-
-    adminList.appendChild(wrapper);
+function updateTabButtons() {
+  tabButtons.forEach((btn) => {
+    btn.classList.toggle('is-active', btn.dataset.tab === currentTab);
   });
 }
 
-function statusLabel(status) {
-  if (status === 'approved') return 'Одобрено';
-  if (status === 'rejected') return 'Отклонено';
-  return 'На рассмотрении';
+function renderAuthState() {
+  loginBox.classList.toggle('hidden', currentUserIsAdmin);
+  sessionBox.classList.toggle('hidden', !currentUserIsAdmin);
+  if (currentUserIsAdmin) {
+    adminIdentity.textContent = currentUser?.email || ADMIN_EMAIL;
+  }
 }
 
-async function onAdminSave(event) {
-  const form = event.target.closest('.admin-edit-form');
-  if (!form) return;
+async function checkAdmin(user) {
+  if (!user) {
+    currentUser = null;
+    currentUserIsAdmin = false;
+    renderAuthState();
+    queueList.innerHTML = '';
+    return false;
+  }
 
-  event.preventDefault();
-  hideMessage(adminMessage);
+  const { data, error } = await supabase.rpc('is_admin');
+  currentUser = user;
+  currentUserIsAdmin = !error && data === true;
+  renderAuthState();
 
-  const item = form.closest('.admin-item');
-  const id = item.dataset.id;
-  const formData = new FormData(form);
+  if (!currentUserIsAdmin) {
+    queueList.innerHTML = '';
+  }
 
-  const payload = {
-    author_name: String(formData.get('author_name') || '').trim(),
-    deed_text: String(formData.get('deed_text') || '').trim(),
-    admin_note: String(formData.get('admin_note') || '').trim() || null,
-    status: String(formData.get('status') || 'pending'),
-    likes_count: Math.max(0, Number(formData.get('likes_count') || 0)),
-    display_order: Number(formData.get('display_order') || 0),
-    is_pinned: formData.get('is_pinned') === 'on',
-  };
+  return currentUserIsAdmin;
+}
 
-  if (payload.author_name.length < 2 || payload.deed_text.length < 3) {
-    setMessage(adminMessage, 'Имя должно быть не короче 2 символов, а текст — не короче 3 символов.', 'error');
+async function fetchCounts() {
+  const { data, error } = await supabase
+    .from('deeds')
+    .select('status', { count: 'exact' });
+
+  if (error || !data) {
+    pendingCount.textContent = '—';
+    approvedCount.textContent = '—';
+    rejectedCount.textContent = '—';
     return;
   }
 
-  const saveButton = form.querySelector('button[type="submit"]');
-  saveButton.disabled = true;
+  const counts = { pending: 0, approved: 0, rejected: 0 };
+  data.forEach((item) => {
+    counts[item.status] = (counts[item.status] || 0) + 1;
+  });
 
-  try {
-    const updatePayload = {
-      ...payload,
-      approved_at: payload.status === 'approved' ? new Date().toISOString() : null,
+  pendingCount.textContent = counts.pending;
+  approvedCount.textContent = counts.approved;
+  rejectedCount.textContent = counts.rejected;
+}
+
+async function loadQueue() {
+  if (!currentUserIsAdmin) {
+    queueList.innerHTML = '';
+    queueEmpty.classList.add('hidden');
+    return;
+  }
+
+  await fetchCounts();
+
+  const orderField = currentTab === 'approved' ? 'likes_count' : 'created_at';
+  const { data, error } = await supabase
+    .from('deeds')
+    .select('*')
+    .eq('status', currentTab)
+    .order('pinned', { ascending: false })
+    .order(orderField, { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    queueList.innerHTML = `<div class="empty-state"><h3 class="empty-title">Ошибка загрузки</h3><p class="empty-copy">${error.message}</p></div>`;
+    queueEmpty.classList.add('hidden');
+    return;
+  }
+
+  queueList.innerHTML = '';
+
+  if (!data.length) {
+    queueEmpty.classList.remove('hidden');
+    return;
+  }
+
+  queueEmpty.classList.add('hidden');
+
+  data.forEach((item) => {
+    const node = template.content.firstElementChild.cloneNode(true);
+    const badges = node.querySelector('.admin-badges');
+    const title = node.querySelector('.admin-card-title');
+    const date = node.querySelector('.admin-date');
+    const author = node.querySelector('.admin-author');
+    const content = node.querySelector('.admin-content');
+    const likes = node.querySelector('.admin-likes');
+    const pinned = node.querySelector('.admin-pinned');
+    const saveBtn = node.querySelector('.saveBtn');
+    const approveBtn = node.querySelector('.approveBtn');
+    const rejectBtn = node.querySelector('.rejectBtn');
+    const deleteBtn = node.querySelector('.deleteBtn');
+    const note = node.querySelector('.admin-note');
+
+    badges.appendChild(createTag(item.status === 'pending' ? 'На модерации' : item.status === 'approved' ? 'Опубликовано' : 'Отклонено', item.status === 'pending' ? 'tag-pending' : item.status === 'approved' ? 'tag-approved' : 'tag-rejected'));
+    if (item.pinned) badges.appendChild(createTag('Закреплено', 'tag-pinned'));
+    badges.appendChild(createTag(`${item.likes_count ?? 0} лайков`, 'tag-soft'));
+
+    title.textContent = slugifyTitle(item.content);
+    date.textContent = formatDate(item.created_at);
+    author.value = item.author_name || 'Анонимно';
+    content.value = item.content || '';
+    likes.value = item.likes_count ?? 0;
+    pinned.value = String(Boolean(item.pinned));
+    note.textContent = currentTab === 'approved'
+      ? 'Опубликованные истории можно редактировать, закреплять и менять лайки.'
+      : currentTab === 'pending'
+        ? 'Можно поправить текст, а затем одобрить или отклонить.'
+        : 'Отклонённые истории можно вернуть и опубликовать.';
+
+    const saveChanges = async (overrides = {}) => {
+      const payload = {
+        author_name: author.value.trim() || 'Анонимно',
+        content: content.value.trim(),
+        likes_count: Math.max(0, Number(likes.value || 0)),
+        pinned: pinned.value === 'true',
+        ...overrides,
+      };
+
+      if (!payload.content || payload.content.length < 3) {
+        alert('Текст истории должен быть не короче 3 символов.');
+        return false;
+      }
+
+      const { error: updateError } = await supabase
+        .from('deeds')
+        .update(payload)
+        .eq('id', item.id);
+
+      if (updateError) {
+        alert(`Не удалось сохранить: ${updateError.message}`);
+        return false;
+      }
+
+      return true;
     };
 
-    const { error } = await supabase.from('good_deeds').update(updatePayload).eq('id', id);
-    if (error) throw error;
+    saveBtn.addEventListener('click', async () => {
+      const ok = await saveChanges();
+      if (ok) await loadQueue();
+    });
 
-    setMessage(adminMessage, 'Изменения сохранены.', 'success');
-    await loadAdminItems();
-  } catch (error) {
-    console.error(error);
-    setMessage(adminMessage, error.message || 'Не удалось сохранить изменения.', 'error');
-  } finally {
-    saveButton.disabled = false;
-  }
-}
+    approveBtn.addEventListener('click', async () => {
+      const ok = await saveChanges({ status: 'approved' });
+      if (ok) await loadQueue();
+    });
 
-async function onAdminClick(event) {
-  const button = event.target.closest('[data-action]');
-  if (!button) return;
+    rejectBtn.addEventListener('click', async () => {
+      const ok = await saveChanges({ status: 'rejected' });
+      if (ok) await loadQueue();
+    });
 
-  const item = button.closest('.admin-item');
-  const id = item.dataset.id;
-  const action = button.dataset.action;
-  hideMessage(adminMessage);
+    deleteBtn.addEventListener('click', async () => {
+      const confirmed = confirm('Удалить эту запись безвозвратно?');
+      if (!confirmed) return;
 
-  button.disabled = true;
+      const { error: deleteError } = await supabase
+        .from('deeds')
+        .delete()
+        .eq('id', item.id);
 
-  try {
-    if (action === 'approve') {
-      const { error } = await supabase
-        .from('good_deeds')
-        .update({ status: 'approved', approved_at: new Date().toISOString() })
-        .eq('id', id);
-      if (error) throw error;
-      setMessage(adminMessage, 'Запись одобрена.', 'success');
-    }
-
-    if (action === 'reject') {
-      const { error } = await supabase
-        .from('good_deeds')
-        .update({ status: 'rejected', approved_at: null })
-        .eq('id', id);
-      if (error) throw error;
-      setMessage(adminMessage, 'Запись отклонена.', 'success');
-    }
-
-    if (action === 'delete') {
-      const confirmed = confirm('Удалить эту запись?');
-      if (!confirmed) {
-        button.disabled = false;
+      if (deleteError) {
+        alert(`Не удалось удалить: ${deleteError.message}`);
         return;
       }
-      const { error } = await supabase.from('good_deeds').delete().eq('id', id);
-      if (error) throw error;
-      setMessage(adminMessage, 'Запись удалена.', 'success');
-    }
 
-    await loadAdminItems();
-  } catch (error) {
-    console.error(error);
-    setMessage(adminMessage, error.message || 'Операция не выполнена.', 'error');
-  } finally {
-    button.disabled = false;
-  }
+      await loadQueue();
+    });
+
+    queueList.appendChild(node);
+  });
 }
+
+async function loginAdmin() {
+  setMessage(loginMessage, '', 'muted');
+  const password = passwordInput.value;
+
+  if (!password) {
+    setMessage(loginMessage, 'Введите пароль администратора.', 'error');
+    return;
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: ADMIN_EMAIL,
+    password,
+  });
+
+  if (error) {
+    setMessage(loginMessage, `Ошибка входа: ${error.message}`, 'error');
+    return;
+  }
+
+  const ok = await checkAdmin(data.user);
+  if (!ok) {
+    await supabase.auth.signOut();
+    setMessage(loginMessage, 'Этот пользователь не добавлен в таблицу admin_users.', 'error');
+    return;
+  }
+
+  passwordInput.value = '';
+  setMessage(loginMessage, 'Вход выполнен.', 'success');
+  await loadQueue();
+}
+
+async function logoutAdmin() {
+  await supabase.auth.signOut();
+  currentUser = null;
+  currentUserIsAdmin = false;
+  renderAuthState();
+  queueList.innerHTML = '';
+  await fetchCounts();
+}
+
+loginBtn.addEventListener('click', loginAdmin);
+logoutBtn.addEventListener('click', logoutAdmin);
+passwordInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') loginAdmin();
+});
+refreshAdminBtn.addEventListener('click', loadQueue);
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    currentTab = btn.dataset.tab;
+    updateTabButtons();
+    await loadQueue();
+  });
+});
+
+const { data: sessionData } = await supabase.auth.getSession();
+await checkAdmin(sessionData.session?.user || null);
+updateTabButtons();
+await fetchCounts();
+if (currentUserIsAdmin) await loadQueue();

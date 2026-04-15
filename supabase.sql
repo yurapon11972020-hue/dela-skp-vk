@@ -1,32 +1,33 @@
-create extension if not exists pgcrypto;
-
-create table if not exists public.good_deeds (
+-- 1) Таблица заявок
+create table if not exists public.deeds (
   id uuid primary key default gen_random_uuid(),
-  author_name text not null,
-  deed_text text not null,
-  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
+  author_name text not null default 'Анонимно',
+  content text not null check (char_length(content) between 3 and 500),
   likes_count integer not null default 0 check (likes_count >= 0),
-  is_pinned boolean not null default false,
-  display_order integer not null default 0,
-  admin_note text,
+  pinned boolean not null default false,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  approved_at timestamptz
+  updated_at timestamptz not null default now()
 );
 
-create table if not exists public.post_likes (
-  post_id uuid not null references public.good_deeds(id) on delete cascade,
+-- 2) Таблица лайков
+create table if not exists public.deed_likes (
+  id bigint generated always as identity primary key,
+  deed_id uuid not null references public.deeds(id) on delete cascade,
   liker_token text not null,
   created_at timestamptz not null default now(),
-  primary key (post_id, liker_token)
+  unique (deed_id, liker_token)
 );
 
+-- 3) Таблица администраторов
 create table if not exists public.admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
+  email text,
   created_at timestamptz not null default now()
 );
 
-create or replace function public.touch_updated_at()
+-- 4) Автообновление updated_at
+create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -36,18 +37,17 @@ begin
 end;
 $$;
 
-DROP TRIGGER IF EXISTS trg_good_deeds_updated_at ON public.good_deeds;
-create trigger trg_good_deeds_updated_at
-before update on public.good_deeds
+drop trigger if exists set_deeds_updated_at on public.deeds;
+create trigger set_deeds_updated_at
+before update on public.deeds
 for each row
-execute function public.touch_updated_at();
+execute function public.set_updated_at();
 
+-- 5) Проверка, является ли пользователь админом
 create or replace function public.is_admin()
 returns boolean
 language sql
 stable
-security definer
-set search_path = public
 as $$
   select exists (
     select 1
@@ -56,178 +56,109 @@ as $$
   );
 $$;
 
-create or replace function public.submit_good_deed(
-  p_author_name text,
-  p_deed_text text
-)
-returns uuid
+-- 6) Безопасная функция лайка
+create or replace function public.like_deed(p_deed_id uuid, p_liker_token text)
+returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_id uuid;
-  v_author_name text;
-  v_deed_text text;
+  inserted_count integer;
 begin
-  v_author_name := btrim(coalesce(p_author_name, ''));
-  v_deed_text := btrim(coalesce(p_deed_text, ''));
-
-  if char_length(v_author_name) < 2 then
-    raise exception 'Поле "От кого" должно содержать минимум 2 символа.';
-  end if;
-
-  if char_length(v_deed_text) < 3 then
-    raise exception 'Описание доброго дела должно содержать минимум 3 символа.';
-  end if;
-
-  if char_length(v_author_name) > 80 then
-    raise exception 'Поле "От кого" не должно превышать 80 символов.';
-  end if;
-
-  if char_length(v_deed_text) > 1000 then
-    raise exception 'Описание доброго дела не должно превышать 1000 символов.';
-  end if;
-
-  insert into public.good_deeds (
-    author_name,
-    deed_text,
-    status,
-    likes_count,
-    is_pinned,
-    display_order,
-    admin_note,
-    approved_at
-  )
-  values (
-    v_author_name,
-    v_deed_text,
-    'pending',
-    0,
-    false,
-    0,
-    null,
-    null
-  )
-  returning id into v_id;
-
-  return v_id;
-end;
-$$;
-
-create or replace function public.increment_good_deed_like(
-  p_deed_id uuid,
-  p_liker_token text
-)
-returns integer
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_current_likes integer;
-  v_inserted integer;
-begin
-  if p_deed_id is null then
-    raise exception 'Не указан идентификатор записи.';
-  end if;
-
-  if btrim(coalesce(p_liker_token, '')) = '' then
-    raise exception 'Не указан токен лайка.';
+  if coalesce(length(trim(p_liker_token)), 0) < 10 then
+    raise exception 'Некорректный токен лайка';
   end if;
 
   if not exists (
     select 1
-    from public.good_deeds
+    from public.deeds
     where id = p_deed_id
       and status = 'approved'
   ) then
-    raise exception 'Лайк можно поставить только одобренной записи.';
+    raise exception 'Запись не найдена или не одобрена';
   end if;
 
-  insert into public.post_likes (post_id, liker_token)
+  insert into public.deed_likes (deed_id, liker_token)
   values (p_deed_id, p_liker_token)
-  on conflict do nothing;
+  on conflict (deed_id, liker_token) do nothing;
 
-  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+  get diagnostics inserted_count = row_count;
 
-  if v_inserted > 0 then
-    update public.good_deeds
-    set likes_count = likes_count + 1
-    where id = p_deed_id;
+  if inserted_count = 0 then
+    raise exception 'Вы уже ставили лайк этой записи';
   end if;
 
-  select likes_count
-  into v_current_likes
-  from public.good_deeds
+  update public.deeds
+  set likes_count = likes_count + 1
   where id = p_deed_id;
-
-  return coalesce(v_current_likes, 0);
 end;
 $$;
 
-alter table public.good_deeds enable row level security;
-alter table public.post_likes enable row level security;
+revoke all on function public.like_deed(uuid, text) from public;
+grant execute on function public.like_deed(uuid, text) to anon, authenticated;
+
+-- 7) RLS
+alter table public.deeds enable row level security;
+alter table public.deed_likes enable row level security;
 alter table public.admin_users enable row level security;
 
-DROP POLICY IF EXISTS "Public can view approved deeds" ON public.good_deeds;
-create policy "Public can view approved deeds"
-on public.good_deeds
+-- 8) Публичный просмотр только одобренных заявок
+create policy "public can read approved deeds"
+on public.deeds
 for select
-using (
-  status = 'approved' or public.is_admin()
+using (status = 'approved' or public.is_admin());
+
+-- 9) Публичная отправка только в pending без лайков и закрепления
+create policy "public can create pending deeds"
+on public.deeds
+for insert
+to anon, authenticated
+with check (
+  status = 'pending'
+  and likes_count = 0
+  and pinned = false
+  and char_length(content) between 3 and 500
 );
 
-DROP POLICY IF EXISTS "Admins can manage deeds" ON public.good_deeds;
-create policy "Admins can manage deeds"
-on public.good_deeds
-for all
+-- 10) Только админ может менять и удалять заявки
+create policy "admins can update deeds"
+on public.deeds
+for update
+to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins can view likes" ON public.post_likes;
-create policy "Admins can view likes"
-on public.post_likes
-for select
+create policy "admins can delete deeds"
+on public.deeds
+for delete
+to authenticated
 using (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins can manage likes" ON public.post_likes;
-create policy "Admins can manage likes"
-on public.post_likes
-for all
-using (public.is_admin())
-with check (public.is_admin());
-
-DROP POLICY IF EXISTS "Admins can view admin users" ON public.admin_users;
-create policy "Admins can view admin users"
-on public.admin_users
+-- 11) Лайки напрямую читать/менять не нужно, только через функцию
+create policy "admins can read likes"
+on public.deed_likes
 for select
+to authenticated
 using (public.is_admin());
 
-DROP POLICY IF EXISTS "Admins can manage admin users" ON public.admin_users;
-create policy "Admins can manage admin users"
-on public.admin_users
+create policy "admins can manage likes"
+on public.deed_likes
 for all
+to authenticated
 using (public.is_admin())
 with check (public.is_admin());
 
-revoke all on public.good_deeds from anon, authenticated;
-revoke all on public.post_likes from anon, authenticated;
-revoke all on public.admin_users from anon, authenticated;
+-- 12) Пользователь может проверить только свою админ-запись
+create policy "admin can read own admin row"
+on public.admin_users
+for select
+to authenticated
+using (user_id = auth.uid());
 
-grant select on public.good_deeds to anon, authenticated;
-grant all on public.good_deeds to authenticated;
-grant select on public.post_likes to authenticated;
-grant all on public.post_likes to authenticated;
-grant select on public.admin_users to authenticated;
-grant all on public.admin_users to authenticated;
-
-grant execute on function public.submit_good_deed(text, text) to anon, authenticated;
-grant execute on function public.increment_good_deed_like(uuid, text) to anon, authenticated;
-grant execute on function public.is_admin() to authenticated;
-
-comment on function public.submit_good_deed(text, text)
-  is 'Публичная отправка доброго дела. Всегда сохраняет запись как pending.';
-
-comment on function public.increment_good_deed_like(uuid, text)
-  is 'Ставит лайк одной одобренной записи один раз на один browser token.';
+-- 13) Первичное создание администратора
+-- Шаг A: в Supabase -> Authentication -> Users создайте пользователя с email и паролем.
+-- Шаг B: после этого выполните SQL ниже, заменив email:
+-- insert into public.admin_users (user_id, email)
+-- select id, email from auth.users where email = 'admin@example.com'
+-- on conflict (user_id) do nothing;

@@ -1,62 +1,172 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Добрые дела — /dela/</title>
-  <link rel="stylesheet" href="../assets/styles.css" />
-</head>
-<body>
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="logo" href="../">Добрые дела</a>
-      <nav class="nav">
-        <a href="./">/dela/</a>
-        <a href="../admin/">/admin/</a>
-      </nav>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Добрые дела — поделитесь своей историей</title>
+    <meta name="description" content="Публичная лента добрых дел. Отправьте свою историю, а после модерации она появится в ленте." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <div class="header-inner">
+          <a class="brand" href="./">
+            <span class="brand-badge">❤</span>
+            <span>Добрые дела</span>
+          </a>
+          <div class="header-meta">
+            <span class="header-chip">Истории людей</span>
+            <span class="header-chip">После модерации</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="hero page-wrap">
+        <div class="hero-shell">
+          <div class="hero-card">
+            <span class="badge tag-soft">Лента добрых историй</span>
+            <h1 class="hero-title">Расскажите о хорошем поступке, который вы сделали.</h1>
+            <p class="hero-copy">
+              Помогли человеку, животному, соседям или природе — напишите об этом. История сначала попадёт на проверку,
+              а затем появится в общей ленте, где её смогут поддержать лайками.
+            </p>
+            <div class="stats-row" style="margin-top:18px; flex-wrap: wrap;">
+              <span class="stat-chip">Без регистрации</span>
+              <span class="stat-chip">Можно подписаться как анонимно</span>
+              <span class="stat-chip">Показываются только одобренные истории</span>
+            </div>
+          </div>
+
+          <aside class="hero-side">
+            <div>
+              <h2>Как это работает</h2>
+              <div class="side-list" style="margin-top:14px;">
+                <div class="side-item">
+                  <strong>1. Отправьте историю</strong>
+                  <span>Коротко и по делу: кто вы и что именно сделали.</span>
+                </div>
+                <div class="side-item">
+                  <strong>2. История проходит проверку</strong>
+                  <span>В ленту попадают только одобренные записи.</span>
+                </div>
+                <div class="side-item">
+                  <strong>3. Люди ставят лайки</strong>
+                  <span>Так самые тёплые истории поднимаются выше.</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <main class="layout">
+        <aside class="column sticky-column">
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Поделиться добрым делом</h2>
+                <p class="section-copy">Опишите поступок обычным языком. После проверки он появится в ленте ниже.</p>
+              </div>
+            </div>
+
+            <form id="deedForm" class="stack">
+              <label class="field">
+                <span class="field-label">От кого</span>
+                <input class="input" id="authorInput" type="text" maxlength="60" placeholder="Например: Алина, Волонтёр, Анонимно" />
+              </label>
+
+              <label class="field">
+                <span class="field-label">Что вы сделали</span>
+                <textarea class="textarea" id="contentInput" maxlength="500" placeholder="Например: Помог пожилой соседке донести тяжёлые сумки и купил ей продукты."></textarea>
+              </label>
+
+              <div class="helper-row">
+                <button class="btn btn-primary" type="submit">Отправить историю</button>
+                <p id="submitMessage" class="message message-muted">Нажимая кнопку, вы отправляете запись на модерацию.</p>
+              </div>
+            </form>
+          </section>
+
+          <section class="side-card">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Что хорошо смотрится в ленте</h2>
+              </div>
+            </div>
+            <div class="side-list">
+              <div class="side-item">
+                <strong>Конкретика</strong>
+                <span>Лучше одна понятная история, чем много общих слов.</span>
+              </div>
+              <div class="side-item">
+                <strong>Искренний тон</strong>
+                <span>Пишите просто и по-человечески, как рассказ другу.</span>
+              </div>
+              <div class="side-item">
+                <strong>Короткий текст</strong>
+                <span>2–5 предложений обычно читаются лучше всего.</span>
+              </div>
+            </div>
+          </section>
+        </aside>
+
+        <section class="feed-section">
+          <div class="feed-header">
+            <div>
+              <h2 class="section-title">Общая лента</h2>
+              <p class="section-copy">Ниже видны только одобренные записи. Закреплённые истории показываются выше остальных.</p>
+            </div>
+            <div class="filter-row">
+              <button id="sortRecentBtn" class="filter-chip" type="button">Сначала новые</button>
+              <button id="sortTopBtn" class="filter-chip" type="button">Сначала популярные</button>
+              <button id="refreshBtn" class="btn btn-ghost" type="button">Обновить</button>
+            </div>
+          </div>
+
+          <div id="feedList" class="story-list"></div>
+
+          <div id="emptyState" class="empty-state hidden">
+            <h3 class="empty-title">Пока нет опубликованных историй</h3>
+            <p class="empty-copy">Станьте первым человеком, который поделится своим добрым делом.</p>
+          </div>
+        </section>
+      </main>
     </div>
-  </header>
 
-  <main class="container page-grid">
-    <section class="card form-card">
-      <div class="section-title-row">
-        <div>
-          <h1>Расскажите о своём добром деле</h1>
-          <p class="muted">После отправки запись попадёт на модерацию к администратору.</p>
+    <template id="storyTemplate">
+      <article class="story-card">
+        <div class="story-shell">
+          <div class="story-vote">
+            <button class="like-btn" type="button" aria-label="Поставить лайк">❤</button>
+            <div class="vote-count">0</div>
+          </div>
+
+          <div class="story-main">
+            <div class="story-header">
+              <div class="stack" style="gap:8px;">
+                <div class="feed-meta"></div>
+                <h3 class="story-author"></h3>
+              </div>
+              <time class="muted story-date"></time>
+            </div>
+
+            <div class="story-body" style="margin-top:14px;">
+              <p class="story-text"></p>
+            </div>
+
+            <div class="story-footer">
+              <span class="story-hint">Один лайк с одного браузера на одну историю.</span>
+              <div class="post-actions"></div>
+            </div>
+          </div>
         </div>
-      </div>
+      </article>
+    </template>
 
-      <form id="deed-form" class="form-stack">
-        <label>
-          <span>От кого</span>
-          <input id="author_name" name="author_name" maxlength="80" placeholder="Например: Анна" required />
-        </label>
-
-        <label>
-          <span>Какое доброе дело вы сделали</span>
-          <textarea id="deed_text" name="deed_text" rows="6" maxlength="1000" placeholder="Например: помог пожилому соседу донести продукты" required></textarea>
-        </label>
-
-        <button class="btn btn-primary" type="submit">Отправить на модерацию</button>
-      </form>
-
-      <div id="form-message" class="message hidden"></div>
-    </section>
-
-    <section class="card feed-card">
-      <div class="section-title-row">
-        <div>
-          <h2>Лента добрых дел</h2>
-          <p class="muted">Показываются только одобренные записи.</p>
-        </div>
-        <button id="reload-feed" class="btn btn-secondary" type="button">Обновить</button>
-      </div>
-
-      <div id="feed" class="feed-list"></div>
-      <div id="feed-empty" class="empty-state hidden">Пока ещё нет одобренных добрых дел.</div>
-    </section>
-  </main>
-
-  <script type="module" src="./app.js"></script>
-</body>
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>

@@ -1,29 +1,13 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Добрые дела</title>
-  <link rel="stylesheet" href="./assets/styles.css" />
-</head>
-<body>
-  <main class="landing-wrap">
-    <section class="landing-card">
-      <span class="badge">GitHub Pages + Supabase</span>
-      <h1>Сайт добрых дел</h1>
-      <p class="lead">
-        Пользователи отправляют свои добрые дела, они проходят модерацию, а затем появляются в общей ленте.
-        Для администратора есть отдельная защищённая панель.
-      </p>
-      <div class="landing-actions">
-        <a class="btn btn-primary" href="./dela/">Открыть /dela/</a>
-        <a class="btn btn-secondary" href="./admin/">Открыть /admin/</a>
-      </div>
-      <div class="hint-box">
-        <strong>Важно:</strong> пароль от админки не хранится в коде сайта. Вход идёт через Supabase Auth,
-        а права администратора проверяются в базе данных.
-      </div>
-    </section>
-  </main>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=./dela/" />
+    <title>Добрые дела</title>
+    <script>
+      location.replace('./dela/');
+    </script>
+  </head>
+  <body></body>
 </html>

@@ -1,146 +1,152 @@
 import {
+  ensureConfigOrRender,
   supabase,
   formatDate,
-  getBrowserLikeToken,
-  markAsLiked,
+  getLikedMap,
+  getLikerToken,
+  setLikedMap,
   setMessage,
-  hideMessage,
-  escapeHtml,
-  wasLiked,
-} from '../assets/shared.js';
+  createTag,
+} from '../assets/common.js';
 
-const form = document.getElementById('deed-form');
-const messageBox = document.getElementById('form-message');
-const feed = document.getElementById('feed');
-const feedEmpty = document.getElementById('feed-empty');
-const reloadBtn = document.getElementById('reload-feed');
+if (!ensureConfigOrRender()) {
+  throw new Error('Config missing');
+}
 
-form?.addEventListener('submit', onSubmit);
-reloadBtn?.addEventListener('click', loadFeed);
-feed?.addEventListener('click', onFeedClick);
+const deedForm = document.getElementById('deedForm');
+const authorInput = document.getElementById('authorInput');
+const contentInput = document.getElementById('contentInput');
+const submitMessage = document.getElementById('submitMessage');
+const feedList = document.getElementById('feedList');
+const emptyState = document.getElementById('emptyState');
+const storyTemplate = document.getElementById('storyTemplate');
+const refreshBtn = document.getElementById('refreshBtn');
+const sortRecentBtn = document.getElementById('sortRecentBtn');
+const sortTopBtn = document.getElementById('sortTopBtn');
 
-document.addEventListener('DOMContentLoaded', loadFeed);
+let sortMode = 'recent';
 
-async function onSubmit(event) {
-  event.preventDefault();
-  hideMessage(messageBox);
-
-  const authorInput = document.getElementById('author_name');
-  const deedInput = document.getElementById('deed_text');
-
-  const author_name = authorInput.value.trim();
-  const deed_text = deedInput.value.trim();
-
-  if (author_name.length < 2 || deed_text.length < 3) {
-    setMessage(messageBox, 'Заполните оба поля. Имя — минимум 2 символа, описание — минимум 3 символа.', 'error');
-    return;
-  }
-
-  const submitButton = form.querySelector('button[type="submit"]');
-  submitButton.disabled = true;
-
-  try {
-    const { error } = await supabase.rpc('submit_good_deed', {
-      p_author_name: author_name,
-      p_deed_text: deed_text,
-    });
-
-    if (error) throw error;
-
-    form.reset();
-    setMessage(messageBox, 'Спасибо! Ваше доброе дело отправлено администратору на рассмотрение.', 'success');
-  } catch (error) {
-    console.error(error);
-    setMessage(messageBox, error.message || 'Не удалось отправить запись.', 'error');
-  } finally {
-    submitButton.disabled = false;
-  }
+function applySortButtonState() {
+  sortRecentBtn.style.background = sortMode === 'recent' ? 'var(--accent-soft)' : '';
+  sortRecentBtn.style.color = sortMode === 'recent' ? 'var(--accent)' : '';
+  sortTopBtn.style.background = sortMode === 'top' ? 'var(--accent-soft)' : '';
+  sortTopBtn.style.color = sortMode === 'top' ? 'var(--accent)' : '';
 }
 
 async function loadFeed() {
-  feed.innerHTML = '<div class="empty-state">Загрузка...</div>';
-  feedEmpty.classList.add('hidden');
-
+  const orderField = sortMode === 'top' ? 'likes_count' : 'created_at';
   const { data, error } = await supabase
-    .from('good_deeds')
-    .select('id, author_name, deed_text, likes_count, is_pinned, display_order, created_at')
+    .from('deeds')
+    .select('id, author_name, content, likes_count, pinned, created_at')
     .eq('status', 'approved')
-    .order('is_pinned', { ascending: false })
-    .order('display_order', { ascending: false })
+    .order('pinned', { ascending: false })
+    .order(orderField, { ascending: false })
     .order('created_at', { ascending: false });
 
   if (error) {
-    console.error(error);
-    feed.innerHTML = '';
-    feedEmpty.textContent = 'Не удалось загрузить ленту.';
-    feedEmpty.classList.remove('hidden');
+    feedList.innerHTML = `<div class="empty-state"><h3 class="empty-title">Не удалось загрузить ленту</h3><p class="empty-copy">${error.message}</p></div>`;
+    emptyState.classList.add('hidden');
     return;
   }
 
-  renderFeed(data || []);
-}
+  feedList.innerHTML = '';
+  const likedMap = getLikedMap();
 
-function renderFeed(items) {
-  feed.innerHTML = '';
-
-  if (!items.length) {
-    feedEmpty.textContent = 'Пока ещё нет одобренных добрых дел.';
-    feedEmpty.classList.remove('hidden');
+  if (!data.length) {
+    emptyState.classList.remove('hidden');
     return;
   }
 
-  feedEmpty.classList.add('hidden');
+  emptyState.classList.add('hidden');
 
-  items.forEach((item) => {
-    const alreadyLiked = wasLiked(item.id);
-    const card = document.createElement('article');
-    card.className = 'feed-item';
-    card.innerHTML = `
-      <div class="feed-top">
-        <div>
-          <div class="feed-author">От кого: ${escapeHtml(item.author_name)}</div>
-          <div class="small-text">${formatDate(item.created_at)}</div>
-        </div>
-        <div>
-          ${item.is_pinned ? '<span class="pin-badge">📌 Закреплено</span>' : ''}
-        </div>
-      </div>
-      <p class="feed-text">${escapeHtml(item.deed_text)}</p>
-      <div class="meta-row">
-        <div class="small-text">Лайков: <strong data-like-count="${item.id}">${item.likes_count}</strong></div>
-        <button class="btn btn-secondary like-btn" data-like-id="${item.id}" ${alreadyLiked ? 'disabled' : ''}>
-          ${alreadyLiked ? '❤️ Уже лайкнуто' : '❤️ Поставить лайк'}
-        </button>
-      </div>
-    `;
-    feed.appendChild(card);
+  data.forEach((item) => {
+    const node = storyTemplate.content.firstElementChild.cloneNode(true);
+    const meta = node.querySelector('.feed-meta');
+    const author = node.querySelector('.story-author');
+    const date = node.querySelector('.story-date');
+    const text = node.querySelector('.story-text');
+    const voteCount = node.querySelector('.vote-count');
+    const likeBtn = node.querySelector('.like-btn');
+    const postActions = node.querySelector('.post-actions');
+
+    if (item.pinned) meta.appendChild(createTag('Закреплено', 'tag-pinned'));
+    meta.appendChild(createTag('Опубликовано', 'tag-approved'));
+
+    author.textContent = item.author_name?.trim() || 'Анонимно';
+    date.textContent = formatDate(item.created_at);
+    text.textContent = item.content;
+    voteCount.textContent = item.likes_count ?? 0;
+    postActions.appendChild(createTag(`${item.likes_count ?? 0} лайков`, 'tag-soft'));
+
+    if (likedMap[item.id]) {
+      likeBtn.classList.add('is-liked');
+      likeBtn.disabled = true;
+      likeBtn.title = 'Вы уже ставили лайк';
+    }
+
+    likeBtn.addEventListener('click', async () => {
+      likeBtn.disabled = true;
+      const { error: likeError } = await supabase.rpc('like_deed', {
+        p_deed_id: item.id,
+        p_liker_token: getLikerToken(),
+      });
+
+      if (likeError) {
+        const already = likeError.message?.toLowerCase().includes('уже');
+        alert(already ? 'Вы уже ставили лайк этой истории.' : `Не удалось поставить лайк: ${likeError.message}`);
+        likeBtn.disabled = Boolean(likedMap[item.id]);
+        return;
+      }
+
+      const map = getLikedMap();
+      map[item.id] = true;
+      setLikedMap(map);
+      await loadFeed();
+    });
+
+    feedList.appendChild(node);
   });
 }
 
-async function onFeedClick(event) {
-  const button = event.target.closest('[data-like-id]');
-  if (!button) return;
+async function submitDeed(event) {
+  event.preventDefault();
+  const authorName = authorInput.value.trim() || 'Анонимно';
+  const content = contentInput.value.trim();
 
-  const postId = button.dataset.likeId;
-  button.disabled = true;
-
-  try {
-    const { data, error } = await supabase.rpc('increment_good_deed_like', {
-      p_deed_id: postId,
-      p_liker_token: getBrowserLikeToken(),
-    });
-
-    if (error) throw error;
-
-    markAsLiked(postId);
-    const counter = document.querySelector(`[data-like-count="${postId}"]`);
-    if (counter && Number.isFinite(Number(data))) {
-      counter.textContent = String(data);
-    }
-    button.textContent = '❤️ Уже лайкнуто';
-  } catch (error) {
-    console.error(error);
-    button.disabled = false;
-    alert(error.message || 'Не удалось поставить лайк.');
+  if (content.length < 3) {
+    setMessage(submitMessage, 'Напишите чуть подробнее: минимум 3 символа.', 'error');
+    return;
   }
+
+  const { error } = await supabase.from('deeds').insert({
+    author_name: authorName,
+    content,
+    status: 'pending',
+    pinned: false,
+    likes_count: 0,
+  });
+
+  if (error) {
+    setMessage(submitMessage, `Ошибка отправки: ${error.message}`, 'error');
+    return;
+  }
+
+  deedForm.reset();
+  setMessage(submitMessage, 'История отправлена. После модерации она появится в ленте.', 'success');
 }
+
+deedForm.addEventListener('submit', submitDeed);
+refreshBtn.addEventListener('click', loadFeed);
+sortRecentBtn.addEventListener('click', async () => {
+  sortMode = 'recent';
+  applySortButtonState();
+  await loadFeed();
+});
+sortTopBtn.addEventListener('click', async () => {
+  sortMode = 'top';
+  applySortButtonState();
+  await loadFeed();
+});
+
+applySortButtonState();
+await loadFeed();

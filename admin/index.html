@@ -1,72 +1,146 @@
 <!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Админка — /admin/</title>
-  <link rel="stylesheet" href="../assets/styles.css" />
-</head>
-<body>
-  <header class="site-header">
-    <div class="container header-inner">
-      <a class="logo" href="../">Добрые дела</a>
-      <nav class="nav">
-        <a href="../dela/">/dela/</a>
-        <a href="./">/admin/</a>
-      </nav>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Модерация — Добрые дела</title>
+    <meta name="robots" content="noindex,nofollow" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../assets/styles.css" />
+  </head>
+  <body>
+    <div class="page admin-page">
+      <header class="site-header">
+        <div class="header-inner">
+          <a class="brand" href="../dela/">
+            <span class="brand-badge">❤</span>
+            <span>Добрые дела</span>
+          </a>
+          <div class="header-meta">
+            <span class="header-chip">Закрытая страница модерации</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="admin-wrap">
+        <aside class="auth-panel">
+          <span class="badge tag-soft">Вход</span>
+          <h1 class="auth-title" style="margin-top:14px;">Модерация историй</h1>
+          <p class="auth-copy">Введите пароль администратора. Email берётся из <code>config.js</code>, пароль в коде не хранится.</p>
+
+          <div id="loginBox" class="auth-field-grid">
+            <label class="field">
+              <span class="field-label">Пароль</span>
+              <input id="passwordInput" class="input" type="password" autocomplete="current-password" placeholder="Введите пароль" />
+            </label>
+            <div class="auth-actions">
+              <button id="loginBtn" class="btn btn-primary" type="button">Войти</button>
+            </div>
+            <p id="loginMessage" class="message message-muted"></p>
+          </div>
+
+          <div id="sessionBox" class="hidden stack">
+            <div class="summary-card">
+              <strong id="adminIdentity">Администратор</strong>
+              <p class="note" style="margin-top:8px;">Здесь можно одобрять, отклонять, редактировать, закреплять и менять количество лайков.</p>
+            </div>
+            <button id="logoutBtn" class="btn btn-ghost" type="button">Выйти</button>
+          </div>
+        </aside>
+
+        <section class="admin-panel">
+          <div class="admin-topbar">
+            <div>
+              <span class="badge tag-soft">Панель модерации</span>
+              <h2 class="panel-title" style="margin-top:12px;">Очередь заявок и опубликованные истории</h2>
+            </div>
+            <div class="queue-tools">
+              <button id="refreshAdminBtn" class="btn btn-ghost" type="button">Обновить</button>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="metric-card">
+              <span class="metric-label">На модерации</span>
+              <strong id="pendingCount" class="metric-value">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Опубликовано</span>
+              <strong id="approvedCount" class="metric-value">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Отклонено</span>
+              <strong id="rejectedCount" class="metric-value">0</strong>
+            </div>
+          </div>
+
+          <div class="admin-tabs">
+            <button class="tab-btn is-active" type="button" data-tab="pending">На модерации</button>
+            <button class="tab-btn" type="button" data-tab="approved">Опубликованные</button>
+            <button class="tab-btn" type="button" data-tab="rejected">Отклонённые</button>
+          </div>
+
+          <div id="queueList" class="queue-list"></div>
+
+          <div id="queueEmpty" class="empty-state hidden">
+            <h3 class="empty-title">Сейчас здесь пусто</h3>
+            <p class="empty-copy">Для выбранного статуса пока нет записей.</p>
+          </div>
+        </section>
+      </main>
     </div>
-  </header>
 
-  <main class="container admin-wrap">
-    <section id="auth-card" class="card auth-card">
-      <div class="section-title-row">
-        <div>
-          <h1>Вход в админку</h1>
-          <p class="muted">Доступ только для администратора, созданного в Supabase Auth.</p>
+    <template id="adminCardTemplate">
+      <article class="admin-card">
+        <div class="admin-card-header">
+          <div class="stack" style="gap:8px;">
+            <div class="admin-badges"></div>
+            <h3 class="admin-card-title"></h3>
+          </div>
+          <time class="muted admin-date"></time>
         </div>
-      </div>
 
-      <form id="login-form" class="form-stack compact-form">
-        <label>
-          <span>Email администратора</span>
-          <input id="admin-email" type="email" autocomplete="username" placeholder="admin@example.com" required />
-        </label>
+        <div class="admin-form-grid">
+          <label class="field">
+            <span class="field-label">Автор</span>
+            <input class="input admin-author" type="text" maxlength="60" />
+          </label>
 
-        <label>
-          <span>Пароль</span>
-          <input id="admin-password" type="password" autocomplete="current-password" placeholder="Введите пароль" required />
-        </label>
+          <label class="field">
+            <span class="field-label">Текст истории</span>
+            <textarea class="textarea admin-content" maxlength="500"></textarea>
+          </label>
 
-        <button class="btn btn-primary" type="submit">Войти</button>
-      </form>
+          <div class="grid-2" style="grid-template-columns: 160px 1fr;">
+            <label class="field">
+              <span class="field-label">Лайки</span>
+              <input class="number-input admin-likes" type="number" min="0" step="1" />
+            </label>
 
-      <div id="auth-message" class="message hidden"></div>
-    </section>
-
-    <section id="admin-panel" class="hidden">
-      <div class="card panel-topbar">
-        <div>
-          <h2>Панель администратора</h2>
-          <p class="muted">Здесь можно одобрять, отклонять, закреплять, редактировать и удалять записи.</p>
+            <label class="field">
+              <span class="field-label">Закрепление</span>
+              <select class="select admin-pinned">
+                <option value="false">Обычная история</option>
+                <option value="true">Закреплённая</option>
+              </select>
+            </label>
+          </div>
         </div>
-        <div class="panel-actions">
-          <select id="status-filter">
-            <option value="all">Все</option>
-            <option value="pending">На рассмотрении</option>
-            <option value="approved">Одобренные</option>
-            <option value="rejected">Отклонённые</option>
-          </select>
-          <button id="refresh-admin" class="btn btn-secondary" type="button">Обновить</button>
-          <button id="logout-btn" class="btn btn-danger" type="button">Выйти</button>
+
+        <div class="moderation-row">
+          <div class="admin-card-actions">
+            <button class="btn btn-secondary saveBtn" type="button">Сохранить</button>
+            <button class="btn btn-success approveBtn" type="button">Одобрить</button>
+            <button class="btn btn-warning rejectBtn" type="button">Отклонить</button>
+            <button class="btn btn-danger deleteBtn" type="button">Удалить</button>
+          </div>
+          <p class="note admin-note">Изменения можно сохранять до смены статуса.</p>
         </div>
-      </div>
+      </article>
+    </template>
 
-      <div id="admin-message" class="message hidden"></div>
-      <div id="admin-list" class="admin-list"></div>
-      <div id="admin-empty" class="empty-state hidden">Записей пока нет.</div>
-    </section>
-  </main>
-
-  <script type="module" src="./app.js"></script>
-</body>
+    <script type="module" src="./app.js"></script>
+  </body>
 </html>
