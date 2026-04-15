@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Добрые дела — /dela/</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="../">Добрые дела</a>
+      <nav class="nav">
+        <a href="./">/dela/</a>
+        <a href="../admin/">/admin/</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container page-grid">
+    <section class="card form-card">
+      <div class="section-title-row">
+        <div>
+          <h1>Расскажите о своём добром деле</h1>
+          <p class="muted">После отправки запись попадёт на модерацию к администратору.</p>
+        </div>
+      </div>
+
+      <form id="deed-form" class="form-stack">
+        <label>
+          <span>От кого</span>
+          <input id="author_name" name="author_name" maxlength="80" placeholder="Например: Анна" required />
+        </label>
+
+        <label>
+          <span>Какое доброе дело вы сделали</span>
+          <textarea id="deed_text" name="deed_text" rows="6" maxlength="1000" placeholder="Например: помог пожилому соседу донести продукты" required></textarea>
+        </label>
+
+        <button class="btn btn-primary" type="submit">Отправить на модерацию</button>
+      </form>
+
+      <div id="form-message" class="message hidden"></div>
+    </section>
+
+    <section class="card feed-card">
+      <div class="section-title-row">
+        <div>
+          <h2>Лента добрых дел</h2>
+          <p class="muted">Показываются только одобренные записи.</p>
+        </div>
+        <button id="reload-feed" class="btn btn-secondary" type="button">Обновить</button>
+      </div>
+
+      <div id="feed" class="feed-list"></div>
+      <div id="feed-empty" class="empty-state hidden">Пока ещё нет одобренных добрых дел.</div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
