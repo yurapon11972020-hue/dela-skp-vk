@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Админка — /admin/</title>
+  <link rel="stylesheet" href="../assets/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="logo" href="../">Добрые дела</a>
+      <nav class="nav">
+        <a href="../dela/">/dela/</a>
+        <a href="./">/admin/</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container admin-wrap">
+    <section id="auth-card" class="card auth-card">
+      <div class="section-title-row">
+        <div>
+          <h1>Вход в админку</h1>
+          <p class="muted">Доступ только для администратора, созданного в Supabase Auth.</p>
+        </div>
+      </div>
+
+      <form id="login-form" class="form-stack compact-form">
+        <label>
+          <span>Email администратора</span>
+          <input id="admin-email" type="email" autocomplete="username" placeholder="admin@example.com" required />
+        </label>
+
+        <label>
+          <span>Пароль</span>
+          <input id="admin-password" type="password" autocomplete="current-password" placeholder="Введите пароль" required />
+        </label>
+
+        <button class="btn btn-primary" type="submit">Войти</button>
+      </form>
+
+      <div id="auth-message" class="message hidden"></div>
+    </section>
+
+    <section id="admin-panel" class="hidden">
+      <div class="card panel-topbar">
+        <div>
+          <h2>Панель администратора</h2>
+          <p class="muted">Здесь можно одобрять, отклонять, закреплять, редактировать и удалять записи.</p>
+        </div>
+        <div class="panel-actions">
+          <select id="status-filter">
+            <option value="all">Все</option>
+            <option value="pending">На рассмотрении</option>
+            <option value="approved">Одобренные</option>
+            <option value="rejected">Отклонённые</option>
+          </select>
+          <button id="refresh-admin" class="btn btn-secondary" type="button">Обновить</button>
+          <button id="logout-btn" class="btn btn-danger" type="button">Выйти</button>
+        </div>
+      </div>
+
+      <div id="admin-message" class="message hidden"></div>
+      <div id="admin-list" class="admin-list"></div>
+      <div id="admin-empty" class="empty-state hidden">Записей пока нет.</div>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
